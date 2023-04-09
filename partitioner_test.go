@@ -10,7 +10,7 @@ import (
 func TestDailyPartitions(t *testing.T) {
 	var queries []string
 	var p = NewPartitioner("testTable", MonthlyInterval, 10)
-	p.(*partitioner).queryCb = func(sql string, params ...interface{}) bool {
+	p.queryCb = func(sql string, params ...interface{}) bool {
 		logrus.Info("query: ", sql, params)
 		queries = append(queries, sql)
 		return false
