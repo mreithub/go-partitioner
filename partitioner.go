@@ -8,10 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jackc/pgconn"
 	"github.com/jackc/pgerrcode"
-	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/mreithub/go-faster/faster"
 	"github.com/sirupsen/logrus"
 )
@@ -42,7 +42,7 @@ func (p *partitioner) exec(db *pgxpool.Pool, sql string, params ...interface{}) 
 	if p.queryCb == nil || p.queryCb(sql, params) {
 		return db.Exec(context.Background(), sql, params...)
 	}
-	return nil, errors.New("query filtered")
+	return pgconn.CommandTag{}, errors.New("query filtered")
 }
 
 func (p *partitioner) decrement(ts time.Time, times int) time.Time {
