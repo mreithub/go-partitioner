@@ -16,13 +16,13 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type partitionType bool
+type Interval bool
 
-// PartitionDaily -- makes partitions in the format 'tableName_2020_05_15'
-const PartitionDaily = partitionType(true)
+// DailyInterval -- makes partitions in the format 'tableName_2020_05_15'
+const DailyInterval = Interval(true)
 
-// PartitionMonthly -- makes partitions in the format 'tableName_2020_05'
-const PartitionMonthly = partitionType(false)
+// MonthlyInterval -- makes partitions in the format 'tableName_2020_05'
+const MonthlyInterval = Interval(false)
 
 // Partitioner -- returned by NewPartitioner() - only used internally so far
 type Partitioner interface {
@@ -31,7 +31,7 @@ type Partitioner interface {
 
 type partitioner struct {
 	parentTable string
-	isDaily     partitionType
+	Interval    Interval
 	keep        int
 
 	// queryCb - used in unit tests to test which queries would end up being sent to the db server (if this returns false, no query is sent to the DB servr)
@@ -46,14 +46,14 @@ func (p *partitioner) exec(db *pgxpool.Pool, sql string, params ...interface{}) 
 }
 
 func (p *partitioner) decrement(ts time.Time, times int) time.Time {
-	if p.isDaily {
+	if p.Interval == DailyInterval {
 		return ts.AddDate(0, 0, -times)
 	}
 	return ts.AddDate(0, -times, 0)
 }
 
 func (p *partitioner) increment(ts time.Time) time.Time {
-	if p.isDaily {
+	if p.Interval == DailyInterval {
 		return ts.AddDate(0, 0, 1)
 	}
 	return ts.AddDate(0, 1, 0)
@@ -61,7 +61,7 @@ func (p *partitioner) increment(ts time.Time) time.Time {
 
 func (p *partitioner) truncate(ts time.Time) time.Time {
 	var y, m, d = ts.Date()
-	if !p.isDaily {
+	if p.Interval == MonthlyInterval {
 		d = 1
 	}
 	return time.Date(y, m, d, 0, 0, 0, 0, ts.Location())
@@ -104,7 +104,7 @@ func (p *partitioner) dropPartition(db *pgxpool.Pool, name string) error {
 
 func (p *partitioner) getPartitionName(ts time.Time) string {
 	var suffix string
-	if p.isDaily {
+	if p.Interval == DailyInterval {
 		suffix = ts.Format("2006_01_02")
 	} else {
 		suffix = ts.Format("2006_01")
@@ -126,7 +126,7 @@ func (p *partitioner) managePartitions(db *pgxpool.Pool, now time.Time) {
 
 	// delete old partitions
 	var limit = 30 // when in daily mode, delete up to 30 old partitions
-	if !p.isDaily {
+	if p.Interval == MonthlyInterval {
 		limit = 6
 	}
 	ts = p.decrement(p.truncate(now), p.keep+1)
@@ -141,11 +141,11 @@ func (p *partitioner) managePartitions(db *pgxpool.Pool, now time.Time) {
 // - parentTable is the name of the table to partition
 // - partitionType specifies whether to use daily or monthly partitions
 // - keep is the number of old partitions to keep before dropping them
-func NewPartitioner(parentTable string, partitionType partitionType, keep int) Partitioner {
+func NewPartitioner(parentTable string, interval Interval, keep int) Partitioner {
 	defer faster.TrackFn().Done()
 	var rc = &partitioner{
 		parentTable: parentTable,
-		isDaily:     partitionType,
+		Interval:    interval,
 		keep:        keep,
 	}
 
