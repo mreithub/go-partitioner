@@ -1,4 +1,4 @@
-package internal
+package partitioner
 
 import (
 	"testing"
