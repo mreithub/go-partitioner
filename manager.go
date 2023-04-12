@@ -4,14 +4,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/mreithub/go-faster/faster"
+	"github.com/mreithub/go-partitioner/driver"
 )
 
 // ManagePartitions -- creates new and drops old partitions for all registered tables
 //
 // should be run periodically
-func ManagePartitions(db *pgxpool.Pool) {
+func ManagePartitions(drv driver.Driver) {
 	defer faster.TrackFn().Done()
 
 	var instances []*Partitioner
@@ -22,7 +22,7 @@ func ManagePartitions(db *pgxpool.Pool) {
 	partitionerInstanceLock.Unlock()
 
 	for _, instance := range instances {
-		instance.managePartitions(db, now)
+		instance.managePartitions(drv, now)
 	}
 }
 
