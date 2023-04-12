@@ -4,8 +4,13 @@ import (
 	"fmt"
 
 	"github.com/mreithub/go-partitioner/driver"
+	"github.com/sirupsen/logrus"
 )
 
+// interface declarations
+var _ driver.Driver = (*MockDriver)(nil)
+
+// fake database connector that keeps track of created and deleted partitions (used for unit tests)
 type MockDriver struct {
 	ExistingPartitions map[string]bool
 
@@ -14,6 +19,7 @@ type MockDriver struct {
 }
 
 func (d *MockDriver) CreatePartition(info driver.CreatePartitionInfo) error {
+	logrus.WithField("info", info).Info("creating partition")
 	if _, ok := d.ExistingPartitions[info.Name]; ok {
 		return fmt.Errorf("partition already exists: %q", info.Name)
 	}
@@ -31,8 +37,27 @@ func (d *MockDriver) DropPartition(name string) error {
 	return nil
 }
 
+// returns a copy of the current list of partitions
 func (d *MockDriver) ListExistingPartitions(name string) (map[string]bool, error) {
-	return d.ExistingPartitions, nil
+	var rc = make(map[string]bool, len(d.ExistingPartitions))
+	for k, v := range d.ExistingPartitions {
+		rc[k] = v
+	}
+	return rc, nil
 }
 
-var _ driver.Driver = (*MockDriver)(nil)
+func (d *MockDriver) ResetCreatedAndDropped() {
+	d.Created = nil
+	d.Dropped = nil
+}
+
+func New(existingPartitions ...string) *MockDriver {
+	var asDict = make(map[string]bool)
+	for _, p := range existingPartitions {
+		asDict[p] = true
+	}
+
+	return &MockDriver{
+		ExistingPartitions: asDict,
+	}
+}
