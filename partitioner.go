@@ -1,17 +1,11 @@
 package partitioner
 
 import (
-	"context"
-	"errors"
 	"fmt"
-	"reflect"
 	"time"
 
-	"github.com/jackc/pgerrcode"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/mreithub/go-faster/faster"
+	"github.com/mreithub/go-partitioner/driver"
 	"github.com/sirupsen/logrus"
 )
 
@@ -29,32 +23,30 @@ type Partitioner struct {
 	Interval    Interval
 	Keep        int
 
-	// queryCb - used in unit tests to test which queries would end up being sent to the db server (if this returns false, no query is sent to the DB servr)
-	queryCb func(sql string, params ...interface{}) bool
+	Logf func(format string, args ...interface{})
 }
 
-func (p *Partitioner) exec(db *pgxpool.Pool, sql string, params ...interface{}) (pgconn.CommandTag, error) {
-	if p.queryCb == nil || p.queryCb(sql, params) {
-		return db.Exec(context.Background(), sql, params...)
-	}
-	return pgconn.CommandTag{}, errors.New("query filtered")
-}
-
-func (p *Partitioner) decrement(ts time.Time, times int) time.Time {
+func (p Partitioner) decrement(ts time.Time, times int) time.Time {
 	if p.Interval == DailyInterval {
 		return ts.AddDate(0, 0, -times)
 	}
 	return ts.AddDate(0, -times, 0)
 }
 
-func (p *Partitioner) increment(ts time.Time) time.Time {
+func (p Partitioner) increment(ts time.Time, times int) time.Time {
 	if p.Interval == DailyInterval {
-		return ts.AddDate(0, 0, 1)
+		return ts.AddDate(0, 0, times)
 	}
-	return ts.AddDate(0, 1, 0)
+	return ts.AddDate(0, times, 0)
 }
 
-func (p *Partitioner) truncate(ts time.Time) time.Time {
+func (p Partitioner) log(format string, args ...interface{}) {
+	if p.Logf != nil {
+		p.Logf(format, args...)
+	}
+}
+
+func (p Partitioner) truncate(ts time.Time) time.Time {
 	var y, m, d = ts.Date()
 	if p.Interval == MonthlyInterval {
 		d = 1
@@ -62,42 +54,7 @@ func (p *Partitioner) truncate(ts time.Time) time.Time {
 	return time.Date(y, m, d, 0, 0, 0, 0, ts.Location())
 }
 
-func (p *Partitioner) createPartition(db *pgxpool.Pool, name string, fromDate time.Time, toDate time.Time) error {
-	defer faster.TrackFn().Done()
-	var err error
-
-	// pgx (or postgres itself) doesn't seem to support parameters for this query -> we're using unescaped time strings here
-	// TODO find a way to properly sanitize input (this method should only be called internally with safe parameters but still...)
-	var sql = fmt.Sprintf("CREATE TABLE %s PARTITION OF %s FOR VALUES FROM ('%s') TO ('%s')",
-		pgx.Identifier{name}.Sanitize(), pgx.Identifier{p.ParentTable}.Sanitize(), fromDate.Format(time.RFC3339), toDate.Format(time.RFC3339))
-	if _, err = p.exec(db, sql); err == nil {
-		logrus.Info("created partition ", name)
-	} else if err, ok := err.(*pgconn.PgError); ok && err.Code == pgerrcode.DuplicateTable {
-		// partition already exists - ignored
-	} else {
-		logrus.WithError(err).Error("create partition failed: ", reflect.TypeOf(err))
-		panic("hi")
-	} //*/
-
-	return err
-}
-
-func (p *Partitioner) dropPartition(db *pgxpool.Pool, name string) error {
-	defer faster.TrackFn().Done()
-	var err error
-
-	if _, err = p.exec(db, fmt.Sprintf("DROP TABLE %s", pgx.Identifier{name}.Sanitize())); err == nil {
-		logrus.Info("dropped partition ", name)
-	} else if err, ok := err.(*pgconn.PgError); ok && err.Code == pgerrcode.UndefinedTable {
-		// table didn't exist - ignored
-	} else {
-		logrus.WithError(err).Error("dropping partition failed")
-	}
-
-	return err
-}
-
-func (p *Partitioner) getPartitionName(ts time.Time) string {
+func (p Partitioner) getPartitionName(ts time.Time) string {
 	var suffix string
 	if p.Interval == DailyInterval {
 		suffix = ts.Format("2006_01_02")
@@ -107,27 +64,56 @@ func (p *Partitioner) getPartitionName(ts time.Time) string {
 	return fmt.Sprintf("%s_%s", p.ParentTable, suffix)
 }
 
-func (p *Partitioner) managePartitions(db *pgxpool.Pool, now time.Time) {
+func (p Partitioner) managePartitions(drv driver.Driver, now time.Time) error {
 	defer faster.TrackFn().Done()
 	now = now.UTC()
 
-	// create future partitions (starting one in the past)
-	var ts = p.decrement(p.truncate(now), 1)
-	for i := 0; i < 4; i++ {
-		var partition = p.getPartitionName(ts)
-		p.createPartition(db, partition, ts, p.increment(ts))
-		ts = p.increment(ts)
+	var existingPartitions, err = drv.ListExistingPartitions(p.ParentTable)
+	if err != nil {
+		return fmt.Errorf("failed to list existing partitions: %w", err)
 	}
 
-	// delete old partitions
-	var limit = 30 // when in daily mode, delete up to 30 old partitions
-	if p.Interval == MonthlyInterval {
-		limit = 6
-	}
-	ts = p.decrement(p.truncate(now), p.Keep+1)
-	for i := 0; i < limit; i++ {
+	var countExisting = len(existingPartitions)
+
+	// enumerate the ones we want to keep/create
+	var minKeepTs = p.decrement(p.truncate(now), p.Keep)
+	var minCreateTs = p.decrement(p.truncate(now), 1)
+	var maxTs = p.increment(p.truncate(now), 1) // create one entry into the future
+	var ts = minKeepTs
+	var countCreated = 0
+	for !ts.After(maxTs) {
 		var partition = p.getPartitionName(ts)
-		p.dropPartition(db, partition)
-		ts = p.decrement(ts, 1)
+		var fromDate = ts
+		var toDate = p.increment(ts, 1)
+
+		if !existingPartitions[partition] && !ts.Before(minCreateTs) {
+			// doesn't yet exist and ts >= minCreateTs  -> create it
+			err = drv.CreatePartition(driver.CreatePartitionInfo{
+				Name:        partition,
+				ParentTable: p.ParentTable,
+				FromDate:    fromDate, ToDate: toDate})
+			if err != nil {
+				return fmt.Errorf("failed to create partition %q: %w", partition, err)
+			}
+			countCreated += 1
+		} else if existingPartitions[partition] {
+			// we'll set 'valid' entries in existingPartition to false (whatever remains true will be deleted in the next step)
+			existingPartitions[partition] = false
+		}
+
+		ts = p.increment(ts, 1)
 	}
+
+	// drop everything we didn't loop over
+	var countDropped = 0
+	for partition, shouldBeDeleted := range existingPartitions {
+		if shouldBeDeleted {
+			if err = drv.DropPartition(partition); err != nil {
+				return fmt.Errorf("failed to drop partition %q: %w", partition, err)
+			}
+			countDropped += 1
+		}
+	}
+	logrus.Infof("partitioner for %q: %d existing partitions - %d created, %d dropped", p.ParentTable, countExisting, countCreated, countDropped)
+	return nil
 }
