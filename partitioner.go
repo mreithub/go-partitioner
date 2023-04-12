@@ -64,7 +64,7 @@ func (p Partitioner) getPartitionName(ts time.Time) string {
 	return fmt.Sprintf("%s_%s", p.ParentTable, suffix)
 }
 
-func (p Partitioner) managePartitions(drv driver.Driver, now time.Time) error {
+func (p Partitioner) ManagePartitions(drv driver.Driver, now time.Time) error {
 	defer faster.TrackFn().Done()
 	now = now.UTC()
 

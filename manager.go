@@ -22,7 +22,7 @@ func ManagePartitions(drv driver.Driver) {
 	partitionerInstanceLock.Unlock()
 
 	for _, instance := range instances {
-		instance.managePartitions(drv, now)
+		instance.ManagePartitions(drv, now)
 	}
 }
 

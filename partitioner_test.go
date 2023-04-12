@@ -29,7 +29,7 @@ func TestCreateAndDrop(t *testing.T) {
 
 	//
 	// initial run, should create "t_2023_01", "t_2023_02" and "t_2023_03"
-	p.managePartitions(mock, time.Date(2023, 2, 6, 12, 34, 56, 0, time.UTC))
+	p.ManagePartitions(mock, time.Date(2023, 2, 6, 12, 34, 56, 0, time.UTC))
 	assert.Equal(t, []driver.CreatePartitionInfo{
 		{ParentTable: "t", Name: "t_2023_01", FromDate: time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC), ToDate: time.Date(2023, 2, 1, 0, 0, 0, 0, time.UTC)},
 		{ParentTable: "t", Name: "t_2023_02", FromDate: time.Date(2023, 2, 1, 0, 0, 0, 0, time.UTC), ToDate: time.Date(2023, 3, 1, 0, 0, 0, 0, time.UTC)},
@@ -40,7 +40,7 @@ func TestCreateAndDrop(t *testing.T) {
 	//
 	// in March, only one new partition should be created: t_2023_04
 	mock.ResetCreatedAndDropped()
-	p.managePartitions(mock, time.Date(2023, 3, 18, 0, 0, 0, 0, time.UTC))
+	p.ManagePartitions(mock, time.Date(2023, 3, 18, 0, 0, 0, 0, time.UTC))
 	assert.Equal(t, []driver.CreatePartitionInfo{
 		{ParentTable: "t", Name: "t_2023_04", FromDate: time.Date(2023, 4, 1, 0, 0, 0, 0, time.UTC), ToDate: time.Date(2023, 5, 1, 0, 0, 0, 0, time.UTC)}},
 		mock.Created)
@@ -49,7 +49,7 @@ func TestCreateAndDrop(t *testing.T) {
 	//
 	// In July, three new partitions should be created (leaving a hole where "t_2023_05" should be)
 	mock.ResetCreatedAndDropped()
-	p.managePartitions(mock, time.Date(2023, 7, 1, 0, 0, 0, 0, time.UTC))
+	p.ManagePartitions(mock, time.Date(2023, 7, 1, 0, 0, 0, 0, time.UTC))
 	assert.Equal(t, []driver.CreatePartitionInfo{
 		{ParentTable: "t", Name: "t_2023_06", FromDate: time.Date(2023, 6, 1, 0, 0, 0, 0, time.UTC), ToDate: time.Date(2023, 7, 1, 0, 0, 0, 0, time.UTC)},
 		{ParentTable: "t", Name: "t_2023_07", FromDate: time.Date(2023, 7, 1, 0, 0, 0, 0, time.UTC), ToDate: time.Date(2023, 8, 1, 0, 0, 0, 0, time.UTC)},
@@ -60,7 +60,7 @@ func TestCreateAndDrop(t *testing.T) {
 	//
 	// next January, it should keep everything from 2023-03 onwards (i.e. drop t_2023_01+t_2023_02) and create t_2023_12..t_2024_02
 	mock.ResetCreatedAndDropped()
-	p.managePartitions(mock, time.Date(2024, 1, 24, 18, 06, 0, 0, time.UTC))
+	p.ManagePartitions(mock, time.Date(2024, 1, 24, 18, 06, 0, 0, time.UTC))
 
 	assert.Equal(t, []driver.CreatePartitionInfo{
 		{ParentTable: "t", Name: "t_2023_12", FromDate: time.Date(2023, 12, 1, 0, 0, 0, 0, time.UTC), ToDate: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)},
@@ -80,7 +80,7 @@ func TestCreateAndDrop(t *testing.T) {
 	// and just to be sure, run the whole thing one last time 2 years later
 	// (should drop all existing partitions and create 3 new ones)
 	mock.ResetCreatedAndDropped()
-	p.managePartitions(mock, time.Date(2026, 1, 24, 13, 17, 1, 0, time.UTC))
+	p.ManagePartitions(mock, time.Date(2026, 1, 24, 13, 17, 1, 0, time.UTC))
 	assert.Equal(t, []driver.CreatePartitionInfo{
 		{ParentTable: "t", Name: "t_2025_12", FromDate: time.Date(2025, 12, 1, 0, 0, 0, 0, time.UTC), ToDate: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
 		{ParentTable: "t", Name: "t_2026_01", FromDate: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), ToDate: time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)},
