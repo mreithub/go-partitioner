@@ -21,12 +21,12 @@ func (d *PGXDriver) CreatePartition(info driver.CreatePartitionInfo) error {
 	var sql = fmt.Sprintf("CREATE TABLE %s PARTITION OF %s FOR VALUES FROM ('%s') TO ('%s')",
 		pgx.Identifier{info.Name}.Sanitize(), pgx.Identifier{info.ParentTable}.Sanitize(), info.FromDate.Format(time.RFC3339), info.ToDate.Format(time.RFC3339))
 	var _, err = d.DB.Query(d.Context, sql)
-
 	return err
 }
 
 func (d *PGXDriver) DropPartition(name string) error {
-	panic("TODO")
+	var _, err = d.DB.Exec(d.Context, fmt.Sprintf("DROP TABLE %s", pgx.Identifier{name}.Sanitize()))
+	return err
 }
 
 func (d *PGXDriver) ListExistingPartitions(table string) (map[string]bool, error) {
