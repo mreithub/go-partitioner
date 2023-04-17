@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/mreithub/go-partitioner/driver"
-	"github.com/sirupsen/logrus"
 )
 
 // interface declarations
@@ -19,7 +18,7 @@ type MockDriver struct {
 }
 
 func (d *MockDriver) CreatePartition(info driver.CreatePartitionInfo) error {
-	logrus.WithField("info", info).Info("creating partition")
+	//log.Printf("creating partition: %v", info)
 	if _, ok := d.ExistingPartitions[info.Name]; ok {
 		return fmt.Errorf("partition already exists: %q", info.Name)
 	}
