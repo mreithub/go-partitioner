@@ -5,7 +5,6 @@ go 1.19
 require (
 	github.com/jackc/pgx/v5 v5.3.1
 	github.com/mreithub/go-faster/faster v0.0.0-20191230232212-4bfc9b474100
-	github.com/sirupsen/logrus v1.9.0
 	github.com/stretchr/testify v1.8.1
 )
 
