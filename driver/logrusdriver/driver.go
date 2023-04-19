@@ -18,19 +18,19 @@ func (d LogrusDriver) ListExistingPartitions(table string) (map[string]bool, err
 func (d LogrusDriver) CreatePartition(info driver.CreatePartitionInfo) error {
 	var err = d.Next.CreatePartition(info)
 	if err != nil {
-		logrus.WithError(err).Error("failed to create partition %q", info.Name)
+		logrus.WithError(err).Errorf("failed to create partition %q", info.Name)
 		return err
 	}
-	logrus.Info("created partition %q", info.Name)
+	logrus.Infof("created partition %q", info.Name)
 	return err
 }
 
 func (d LogrusDriver) DropPartition(name string) error {
 	var err = d.Next.DropPartition(name)
 	if err != nil {
-		logrus.WithError(err).Error("failed to drop partition %q", name)
+		logrus.WithError(err).Errorf("failed to drop partition %q", name)
 		return err
 	}
-	logrus.Info("dropped partition %q", name)
+	logrus.Infof("dropped partition %q", name)
 	return nil
 }
