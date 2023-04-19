@@ -106,7 +106,9 @@ func (m *Runner) Start(drv driver.Driver) {
 }
 
 func NewRunner(ctx context.Context) *Runner {
-	var rc Runner
+	var rc = Runner{
+		instances: make(map[*Partitioner]struct{}),
+	}
 	rc.ctx, rc.cancelFn = context.WithCancel(ctx)
 	rc.ready, rc.readyFn = context.WithCancel(rc.ctx)
 	return &rc
