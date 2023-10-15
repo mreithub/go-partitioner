@@ -20,7 +20,12 @@ const MonthlyInterval = Interval(false)
 type Partitioner struct {
 	ParentTable string
 	Interval    Interval
-	Keep        int
+	// number of partitions to keep (e.g. 6 means '6 days' or '6 months' of partitions, depending on .Interval)
+	Keep int
+
+	// if set, you can prevent certain partitions from being deleted
+	// (use this for example to prevent deletion of a default partition - or to prevent automatic deletion altogether)
+	CanDropFn func(partitionName string) bool
 }
 
 func (p Partitioner) decrement(ts time.Time, times int) time.Time {
@@ -99,6 +104,10 @@ func (p Partitioner) ManagePartitions(drv driver.Driver, now time.Time) (RunInfo
 	// drop everything we didn't loop over
 	for partition, shouldBeDeleted := range existingPartitions {
 		if shouldBeDeleted {
+			if p.CanDropFn != nil && !p.CanDropFn(partition) {
+				continue
+			}
+
 			if err = drv.DropPartition(partition); err != nil {
 				return rc, fmt.Errorf("failed to drop partition %q: %w", partition, err)
 			}
