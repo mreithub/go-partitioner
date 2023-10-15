@@ -98,6 +98,7 @@ func (m *Runner) Start(drv driver.Driver) error {
 	// run once right away
 	var err = m.filterError(m.runOnce(drv))
 	if err != nil {
+		m.cancelFn()
 		return err // abort (without the .Ready() channel being closed)
 	}
 
