@@ -25,6 +25,7 @@ type Runner struct {
 func (m *Runner) Done() <-chan struct{} { return m.ctx.Done() }
 
 // check if the initial partitioner run has finished (i.e. if all partitions we need have been created)
+// Deprecated: .Start() will now always run the partitioner once before returning (and returns an error now)
 func (m *Runner) Ready() <-chan struct{} { return m.ready.Done() }
 
 func (m *Runner) Add(p Partitioner) *Partitioner {
@@ -64,14 +65,6 @@ func (m *Runner) Remove(p *Partitioner) {
 func (m *Runner) run(drv driver.Driver) {
 	defer m.cancelFn()
 
-	// run once right away
-	var err = m.filterError(m.runOnce(drv))
-	if err != nil {
-		return // abort (without the .Ready() channel being closed)
-	}
-	// mark this runner as ready
-	m.readyFn()
-
 	var ticker = time.NewTicker(6 * time.Hour)
 	defer ticker.Stop()
 
@@ -100,9 +93,18 @@ func (m *Runner) runOnce(drv driver.Driver) error {
 	return nil
 }
 
-// Start the partition runner (wait for it to be ready afterwards)
-func (m *Runner) Start(drv driver.Driver) {
+// run each partitioner once and then Start the partition runner as goroutine
+func (m *Runner) Start(drv driver.Driver) error {
+	// run once right away
+	var err = m.filterError(m.runOnce(drv))
+	if err != nil {
+		return err // abort (without the .Ready() channel being closed)
+	}
+
+	// mark this runner as ready and start goroutine
+	m.readyFn()
 	go m.run(drv)
+	return nil
 }
 
 func NewRunner(ctx context.Context) *Runner {
