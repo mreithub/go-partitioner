@@ -8,14 +8,6 @@ import (
 	"github.com/mreithub/go-partitioner/driver"
 )
 
-type Interval bool
-
-// DailyInterval -- makes partitions in the format 'tableName_2020_05_15'
-const DailyInterval = Interval(true)
-
-// MonthlyInterval -- makes partitions in the format 'tableName_2020_05'
-const MonthlyInterval = Interval(false)
-
 // Partitioner - manages postgres partitions for a table
 type Partitioner struct {
 	ParentTable string
@@ -26,38 +18,6 @@ type Partitioner struct {
 	// if set, you can prevent certain partitions from being deleted
 	// (use this for example to prevent deletion of a default partition - or to prevent automatic deletion altogether)
 	CanDropFn func(partitionName string) bool
-}
-
-func (p Partitioner) decrement(ts time.Time, times int) time.Time {
-	if p.Interval == DailyInterval {
-		return ts.AddDate(0, 0, -times)
-	}
-	return ts.AddDate(0, -times, 0)
-}
-
-func (p Partitioner) increment(ts time.Time, times int) time.Time {
-	if p.Interval == DailyInterval {
-		return ts.AddDate(0, 0, times)
-	}
-	return ts.AddDate(0, times, 0)
-}
-
-func (p Partitioner) truncate(ts time.Time) time.Time {
-	var y, m, d = ts.Date()
-	if p.Interval == MonthlyInterval {
-		d = 1
-	}
-	return time.Date(y, m, d, 0, 0, 0, 0, ts.Location())
-}
-
-func (p Partitioner) getPartitionName(ts time.Time) string {
-	var suffix string
-	if p.Interval == DailyInterval {
-		suffix = ts.Format("2006_01_02")
-	} else {
-		suffix = ts.Format("2006_01")
-	}
-	return fmt.Sprintf("%s_%s", p.ParentTable, suffix)
 }
 
 func (p Partitioner) ManagePartitions(drv driver.Driver, now time.Time) (RunInfo, error) {
@@ -74,14 +34,14 @@ func (p Partitioner) ManagePartitions(drv driver.Driver, now time.Time) (RunInfo
 	}
 
 	// enumerate the ones we want to keep/create
-	var minKeepTs = p.decrement(p.truncate(now), p.Keep)
-	var minCreateTs = p.decrement(p.truncate(now), 1)
-	var maxTs = p.increment(p.truncate(now), 1) // create one entry into the future
+	var minKeepTs = p.Interval.Decrement(p.Interval.Truncate(now), p.Keep)
+	var minCreateTs = p.Interval.Decrement(p.Interval.Truncate(now), 1)
+	var maxTs = p.Interval.Increment(p.Interval.Truncate(now), 1) // create one entry into the future
 	var ts = minKeepTs
 	for !ts.After(maxTs) {
-		var partition = p.getPartitionName(ts)
+		var partition = p.Interval.GetPartitionName(ts, p.ParentTable)
 		var fromDate = ts
-		var toDate = p.increment(ts, 1)
+		var toDate = p.Interval.Increment(ts, 1)
 
 		if !existingPartitions[partition] && !ts.Before(minCreateTs) {
 			// doesn't yet exist and ts >= minCreateTs  -> create it
@@ -98,7 +58,7 @@ func (p Partitioner) ManagePartitions(drv driver.Driver, now time.Time) (RunInfo
 			existingPartitions[partition] = false
 		}
 
-		ts = p.increment(ts, 1)
+		ts = p.Interval.Increment(ts, 1)
 	}
 
 	// drop everything we didn't loop over
