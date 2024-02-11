@@ -1,3 +1,6 @@
+// info on nested submodules:
+// https://github.com/go-modules-by-example/index/blob/master/009_submodules/README.md
+
 module github.com/mreithub/go-partitioner
 
 go 1.19
