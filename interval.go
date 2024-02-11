@@ -11,6 +11,9 @@ var DailyInterval Interval = intervalImpl{days: 1, tblFormat: "2006_01_02"}
 // MonthlyInterval -- makes partitions in the format 'tableName_2020_05'
 var MonthlyInterval Interval = intervalImpl{months: 1, tblFormat: "2006_01"}
 
+// YearlyInterval -- makes
+var YearlyInterval Interval = intervalImpl{years: 1, tblFormat: "2006"}
+
 type Interval interface {
 	// go back one day/month (depending on the interval)
 	Decrement(ts time.Time, times int) time.Time
@@ -18,8 +21,9 @@ type Interval interface {
 	Increment(ts time.Time, times int) time.Time
 
 	// sets the fields of ts that are too granular to 1 (for date fields) and the time to 00:00:00
-	// - DailyInterval returns YYYY-MM-DD 00:00:00
-	// - MonthlyInterval returns YYYY-MM-01 00:00:00
+	// - DailyInterval returns YYYY-MM-DD
+	// - MonthlyInterval returns YYYY-MM-01
+	// - YearlyInterval returns YYYY-01-01
 	Truncate(ts time.Time) time.Time
 
 	// for any timestamp, returns the name of the partition
@@ -51,6 +55,9 @@ func (i intervalImpl) Truncate(ts time.Time) time.Time {
 	var y, m, d = ts.Date()
 	if i.days == 0 {
 		d = 1
+		if i.months == 0 {
+			m = 1
+		}
 	}
 	return time.Date(y, m, d, 0, 0, 0, 0, ts.Location())
 
